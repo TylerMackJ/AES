@@ -24,11 +24,11 @@ void encrypt(uint8_t *bytes, int length, uint8_t *key, enum KeySize keySize, uin
 int main()
 {
     // Input
-    uint8_t data[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
+    uint8_t data[] = {0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     int dataLength = 16;
 
     // Key
-    enum KeySize keySize = AES128;
+    enum KeySize keySize = AES256;
     uint8_t *key = (uint8_t *)malloc(sizeof(uint8_t) * (keySize / 8));
 
     // Output
@@ -38,7 +38,7 @@ int main()
     // Init key
     for (int i = 0; i < (keySize / 8); i++)
     {
-        key[i] = (uint8_t)i;
+        key[i] = (uint8_t)0;
     }
 
     // Print out plaintext
@@ -47,10 +47,10 @@ int main()
 
     // Print out key
     printf("Key:\t\t");
-    printLength(key, 16);
+    printLength(key, keySize / 8);
 
     // Encrypt Data
-    encrypt(data, dataLength, key, AES128, &encryptedData, &encryptedLength);
+    encrypt(data, dataLength, key, keySize, &encryptedData, &encryptedLength);
 
     // Print out encrypted data
     printf("\nEncrypted:\t");

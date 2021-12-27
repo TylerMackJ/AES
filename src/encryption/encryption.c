@@ -34,52 +34,56 @@ void keyExpansion(enum KeySize keySize, uint8_t *key, uint32_t **expansion)
 {
     uint8_t *sbox = get_sbox();
 
-    if (keySize == AES128)
+    int rounds;
+
+    switch (keySize)
     {
-        *expansion = (uint32_t *)malloc(sizeof(uint32_t) * 44);
-
-        uint32_t rcon[] = {0x00000000, 0x01000000, 0x02000000, 0x04000000, 0x08000000, 0x10000000,
-                           0x20000000, 0x40000000, 0x80000000, 0x1B000000, 0x36000000};
-
-        // Set first round key = K
-        (*expansion)[0] = ((key[0] << 24) & (0xFF << 24)) | ((key[1] << 16) & (0xFF << 16)) |
-                          ((key[2] << 8) & (0xFF << 8)) | (key[3] & 0xFF);
-        (*expansion)[1] = ((key[4] << 24) & (0xFF << 24)) | ((key[5] << 16) & (0xFF << 16)) |
-                          ((key[6] << 8) & (0xFF << 8)) | (key[7] & 0xFF);
-        (*expansion)[2] = ((key[8] << 24) & (0xFF << 24)) | ((key[9] << 16) & (0xFF << 16)) |
-                          ((key[10] << 8) & (0xFF << 8)) | (key[11] & 0xFF);
-        (*expansion)[3] = ((key[12] << 24) & (0xFF << 24)) | ((key[13] << 16) & (0xFF << 16)) |
-                          ((key[14] << 8) & (0xFF << 8)) | (key[15] & 0xFF);
-
-        // Get other round keys
-        for (int i = 4; i < 44; i++)
-        {
-            uint32_t temp = (*expansion)[i - 1];
-            if (i % 4 == 0)
-            {
-                // RotWord
-                temp = ((temp << 8) & 0xFFFFFF00) | ((temp >> 24) & 0xFF);
-
-                // SubWord
-                uint8_t b0 = sbox[(temp >> 24) & 0xFF];
-                uint8_t b1 = sbox[(temp >> 16) & 0xFF];
-                uint8_t b2 = sbox[(temp >> 8) & 0xFF];
-                uint8_t b3 = sbox[(temp >> 0) & 0xFF];
-
-                temp =
-                    ((b0 << 24) & (0xFF << 24)) | ((b1 << 16) & (0xFF << 16)) | ((b2 << 8) & (0xFF << 8)) | (b3 & 0xFF);
-
-                // Rcon
-                temp = temp ^ rcon[i / 4];
-            }
-
-            (*expansion)[i] = temp ^ (*expansion)[i - 4];
-        }
+    case AES128:
+        rounds = 10;
+        break;
+    case AES192:
+        rounds = 12;
+        break;
+    case AES256:
+        rounds = 14;
+        break;
     }
-    else
+
+    *expansion = (uint32_t *)malloc(sizeof(uint32_t) * (rounds + 1) * 4);
+
+    uint32_t rcon[] = {0x00000000, 0x01000000, 0x02000000, 0x04000000, 0x08000000, 0x10000000,
+                       0x20000000, 0x40000000, 0x80000000, 0x1B000000, 0x36000000};
+
+    // Set beginning of expansion as the key
+    for (int i = 0; i < (keySize / 32); i++)
     {
-        printf("Key scheduling not implemented for AES%d\n", keySize);
-        exit(1);
+        (*expansion)[i] = ((key[(i * 4) + 0] << 24) & (0xFF << 24)) | ((key[(i * 4) + 1] << 16) & (0xFF << 16)) |
+                          ((key[(i * 4) + 2] << 8) & (0xFF << 8)) | (key[(i * 4) + 3] & 0xFF);
+    }
+
+    // Get other round keys
+    for (int i = (keySize / 32); i < ((rounds + 1) * 4); i++)
+    {
+        uint32_t temp = (*expansion)[i - 1];
+
+        if (i % (keySize / 32) == 0)
+        {
+            // RotWord
+            temp = ((temp << 8) & 0xFFFFFF00) | ((temp >> 24) & 0xFF);
+
+            // SubWord
+            uint8_t b0 = sbox[(temp >> 24) & 0xFF];
+            uint8_t b1 = sbox[(temp >> 16) & 0xFF];
+            uint8_t b2 = sbox[(temp >> 8) & 0xFF];
+            uint8_t b3 = sbox[(temp >> 0) & 0xFF];
+
+            temp = ((b0 << 24) & (0xFF << 24)) | ((b1 << 16) & (0xFF << 16)) | ((b2 << 8) & (0xFF << 8)) | (b3 & 0xFF);
+
+            // Rcon
+            temp = temp ^ rcon[i / (keySize / 32)];
+        }
+
+        (*expansion)[i] = temp ^ (*expansion)[i - (keySize / 32)];
     }
 }
 
