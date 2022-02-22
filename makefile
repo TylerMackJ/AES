@@ -1,7 +1,7 @@
-all : bin/sEncrypt
+all : bin/main
 
-bin/sEncrypt : src/sEncrypt.c src/encryption/*.c src/shared/*.c bin/
-	clang src/sEncrypt.c src/encryption/*.c src/shared/*.c -o bin/sEncrypt
+bin/main : src/main.c src/encryption/*.c src/shared/*.c src/aes/*.c src/keyExpansion/*.c bin/
+	clang src/main.c src/encryption/*.c src/shared/*.c src/aes/*.c src/keyExpansion/*.c -o bin/main
 
 bin/ :
 	mkdir bin/

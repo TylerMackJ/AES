@@ -1,41 +1,22 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
-#include "../shared/shared.h"
 #include "encryption.h"
+#include "../keyExpansion/keyExpansion.h"
 
-void padBytes(uint8_t *bytes, int length, uint8_t **paddedBytes, int *paddedLength)
-{
-    *paddedLength = length;
-
-    // Pad data out to 128 bit chunks
-    if (*paddedLength % 16 != 0)
+void encryptState(uint8_t* stateArray, uint32_t* expandedKey, enum KeySize keySize) {
+    // XOR with first 4 words of key expansion
+    addRoundKey(stateArray, 0, expandedKey);
+    if (DEBUG)
     {
-        // If not already divisable by 16 then add an additional chunk
-        *paddedLength = ((*paddedLength / 16) + 1) * 16;
+        printf("\nRound 0:\n\tAddRKey:\t");
+        printLength(stateArray, 16);
     }
 
-    // Move bytes into padded byte buffer
-    *paddedBytes = (uint8_t *)malloc(sizeof(uint8_t) * *paddedLength);
-    for (int i = 0; i < length; i++)
-    {
-        (*paddedBytes)[i] = ((char *)bytes)[i];
-    }
-
-    // Assure 0's for padded data
-    for (int i = length; i < *paddedLength; i++)
-    {
-        (*paddedBytes)[i] = '\0';
-    }
-}
-
-void keyExpansion(enum KeySize keySize, uint8_t *key, uint32_t **expansion)
-{
-    uint8_t *sbox = get_sbox();
-
+    // Loop through rounds
     int rounds;
-
     switch (keySize)
     {
     case AES128:
@@ -49,67 +30,64 @@ void keyExpansion(enum KeySize keySize, uint8_t *key, uint32_t **expansion)
         break;
     }
 
-    *expansion = (uint32_t *)malloc(sizeof(uint32_t) * (rounds + 1) * 4);
-
-    uint32_t rcon[] = {0x00000000, 0x01000000, 0x02000000, 0x04000000, 0x08000000, 0x10000000,
-                       0x20000000, 0x40000000, 0x80000000, 0x1B000000, 0x36000000};
-
-    // Set beginning of expansion as the key
-    for (int i = 0; i < (keySize / 32); i++)
+    for (int round = 1; round <= rounds; round++)
     {
-        (*expansion)[i] = ((key[(i * 4) + 0] << 24) & (0xFF << 24)) | ((key[(i * 4) + 1] << 16) & (0xFF << 16)) |
-                          ((key[(i * 4) + 2] << 8) & (0xFF << 8)) | (key[(i * 4) + 3] & 0xFF);
-    }
-
-    // Get other round keys
-    for (int i = (keySize / 32); i < ((rounds + 1) * 4); i++)
-    {
-        uint32_t temp = (*expansion)[i - 1];
-
-        if (i % (keySize / 32) == 0)
+        if (DEBUG)
         {
-            // RotWord
-            temp = ((temp << 8) & 0xFFFFFF00) | ((temp >> 24) & 0xFF);
-
-            // SubWord
-            uint8_t b0 = sbox[(temp >> 24) & 0xFF];
-            uint8_t b1 = sbox[(temp >> 16) & 0xFF];
-            uint8_t b2 = sbox[(temp >> 8) & 0xFF];
-            uint8_t b3 = sbox[(temp >> 0) & 0xFF];
-
-            temp = ((b0 << 24) & (0xFF << 24)) | ((b1 << 16) & (0xFF << 16)) | ((b2 << 8) & (0xFF << 8)) | (b3 & 0xFF);
-
-            // Rcon
-            temp = temp ^ rcon[i / (keySize / 32)];
+            printf("\nRound %d:\n", round);
         }
 
-        (*expansion)[i] = temp ^ (*expansion)[i - (keySize / 32)];
+        // Substitute bytes
+        subBytes(stateArray);
+        if (DEBUG)
+        {
+            printf("\tSubBytes:\t");
+            printLength(stateArray, 16);
+        }
+
+        // Shift rows
+        shiftRows(stateArray);
+        if (DEBUG)
+        {
+            printf("\tShiftRows:\t");
+            printLength(stateArray, 16);
+        }
+
+        // Mix columns (not on last round)
+        if (round != rounds)
+        {
+            for (int column = 0; column < 4; column++)
+            {
+                mixColumns(&(stateArray[index(column, 0)]));
+            }
+        }
+        if (DEBUG)
+        {
+            printf("\tMixCols:\t");
+            printLength(stateArray, 16);
+        }
+
+        // Add round key
+        addRoundKey(stateArray, round, expandedKey);
+        if (DEBUG)
+        {
+            printf("\tAddRKey:\t");
+            printLength(stateArray, 16);
+        }
     }
 }
 
-void gMixColumns(uint8_t *r)
+void mixColumns(uint8_t *r)
 {
-    unsigned char a[4];
-    unsigned char b[4];
-    unsigned char c;
-    unsigned char h;
-    /* The array 'a' is simply a copy of the input array 'r'
-     * The array 'b' is each element of the array 'a' multiplied by 2
-     * in Rijndael's Galois field
-     * a[n] ^ b[n] is element n multiplied by 3 in Rijndael's Galois field */
-    for (c = 0; c < 4; c++)
+    int a[4];
+    for (uint8_t c = 0; c < 4; c++)
     {
         a[c] = r[c];
-        /* h is 0xff if the high bit of r[c] is set, 0 otherwise */
-        h = (r[c] >> 7) & 1; /* arithmetic right shift, thus shifting in either zeros or ones */
-        b[c] = r[c] << 1; /* implicitly removes high bit because b[c] is an 8-bit char, so we xor by 0x1b and not 0x11b
-                             in the next line */
-        b[c] ^= h * 0x1B; /* Rijndael's Galois field */
     }
-    r[0] = b[0] ^ a[3] ^ a[2] ^ b[1] ^ a[1]; /* 2 * a0 + a3 + a2 + 3 * a1 */
-    r[1] = b[1] ^ a[0] ^ a[3] ^ b[2] ^ a[2]; /* 2 * a1 + a0 + a3 + 3 * a2 */
-    r[2] = b[2] ^ a[1] ^ a[0] ^ b[3] ^ a[3]; /* 2 * a2 + a1 + a0 + 3 * a3 */
-    r[3] = b[3] ^ a[2] ^ a[1] ^ b[0] ^ a[0]; /* 2 * a3 + a2 + a1 + 3 * a0 */
+    r[0] = mb02[a[0]] ^ mb03[a[1]] ^      a[2]  ^       a[3] ;
+    r[1] =      a[0]  ^ mb02[a[1]] ^ mb03[a[2]] ^       a[3] ;
+    r[2] =      a[0]  ^      a[1]  ^ mb02[a[2]] ^  mb03[a[3]];
+    r[3] = mb03[a[0]] ^      a[1]  ^      a[2]  ^  mb02[a[3]];
 }
 
 void shiftRows(uint8_t *stateArray)
@@ -140,7 +118,6 @@ void shiftRows(uint8_t *stateArray)
 
 void subBytes(uint8_t *stateArray)
 {
-    uint8_t *sbox = get_sbox();
     for (int i = 0; i < 16; i++)
     {
         stateArray[i] = sbox[stateArray[i]];
