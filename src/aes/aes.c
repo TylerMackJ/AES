@@ -6,13 +6,12 @@
 #include "../keyExpansion/keyExpansion.h"
 #include "../encryption/encryption.h"
 
-void encrypt(uint8_t *data, int length, uint8_t *key, enum KeySize keySize, uint8_t **encryptedData, int *paddedLength)
+void encrypt(uint8_t *data, int length, uint8_t *key, enum KeySize keySize, uint64_t nonce, uint8_t **encryptedData, int *paddedLength)
 {
     // Pad data (with 0) to a 16 byte divisble length
     ePadBytes(data, length, encryptedData, paddedLength);
 
     // Get nonce and prepend it to encrypted data
-    uint64_t nonce = rand_uint64();
     for (int i = 0; i < 8; i++) 
     {
         (*encryptedData)[i] = ((uint8_t*)&nonce)[i];
@@ -158,26 +157,4 @@ void dPadBytes(uint8_t *bytes, int length, uint8_t **paddedBytes, int *paddedLen
     {
         (*paddedBytes)[i] = '\0';
     }
-}
-
-#if RAND_MAX/256 >= 0xFFFFFFFFFFFFFF
-  #define LOOP_COUNT 1
-#elif RAND_MAX/256 >= 0xFFFFFF
-  #define LOOP_COUNT 2
-#elif RAND_MAX/256 >= 0x3FFFF
-  #define LOOP_COUNT 3
-#elif RAND_MAX/256 >= 0x1FF
-  #define LOOP_COUNT 4
-#else
-  #define LOOP_COUNT 5
-#endif
-
-uint64_t rand_uint64(void) {
-    time_t t;
-    srand((unsigned) time(&t));
-    uint64_t r = 0;
-    for (int i=LOOP_COUNT; i > 0; i--) {
-        r = r*(RAND_MAX + (uint64_t)1) + rand();
-    }
-    return r;
 }

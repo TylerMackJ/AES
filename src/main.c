@@ -58,7 +58,7 @@ int main()
     printLength(data, dataLength);
 
     // Encrypt Data
-    encrypt(data, dataLength, key, keySize, &encryptedData, &encryptedLength);
+    encrypt(data, dataLength, key, keySize, rand_uint64(), &encryptedData, &encryptedLength);
 
     // Print out encrypted data
     printf("\nEncrypted:\t");

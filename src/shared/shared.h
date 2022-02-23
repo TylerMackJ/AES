@@ -22,4 +22,7 @@ enum KeySize
 
 void printLength(uint8_t *data, int length);
 
+// https://stackoverflow.com/questions/33010010/how-to-generate-random-64-bit-unsigned-integer-in-c
+uint64_t rand_uint64(void);
+
 #endif
